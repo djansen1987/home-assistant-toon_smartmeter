@@ -38,11 +38,10 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.components.sensor import PLATFORM_SCHEMA, STATE_CLASS_MEASUREMENT
 from homeassistant.const import (
-    CONF_USERNAME, 
-    CONF_PASSWORD, 
-    CONF_RESOURCES, 
-    CONF_SENSORS, 
-    CONF_DEVICE_ID,
+    CONF_HOST, 
+    CONF_PORT, 
+    CONF_SCAN_INTERVAL, 
+    CONF_RESOURCES,
     DEVICE_CLASS_ENERGY,
     DEVICE_CLASS_POWER,
     ENERGY_WATT_HOUR,
