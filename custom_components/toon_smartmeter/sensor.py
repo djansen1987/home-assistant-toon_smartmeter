@@ -36,9 +36,18 @@ from functools import reduce
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.components.sensor import PLATFORM_SCHEMA
+from homeassistant.components.sensor import PLATFORM_SCHEMA, STATE_CLASS_MEASUREMENT
 from homeassistant.const import (
-    CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, CONF_RESOURCES
+    CONF_USERNAME, 
+    CONF_PASSWORD, 
+    CONF_RESOURCES, 
+    CONF_SENSORS, 
+    CONF_DEVICE_ID,
+    DEVICE_CLASS_ENERGY,
+    DEVICE_CLASS_POWER,
+    ENERGY_WATT_HOUR,
+    PERCENTAGE,
+    POWER_WATT,
     )
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import Throttle
@@ -50,21 +59,21 @@ MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=10)
 
 SENSOR_PREFIX = 'Toon '
 SENSOR_TYPES = {
-    'gasused': ['Gas Used Last Hour', 'm3', 'mdi:fire'],
-    'gasusedcnt': ['Gas Used Cnt', 'm3', 'mdi:fire'],
-    'elecusageflowpulse': ['Power Use', 'Watt', 'mdi:flash'],
-    'elecusageflowlow': ['P1 Power Use Low', 'Watt', 'mdi:flash'],
-    'elecusageflowhigh': ['P1 Power Use High', 'Watt', 'mdi:flash'],
-    'elecprodflowlow': ['P1 Power Prod Low', 'Watt', 'mdi:flash'],
-    'elecprodflowhigh': ['P1 Power Prod High', 'Watt', 'mdi:flash'],
-    'elecusagecntpulse': ['Power Use Cnt', 'kWh', 'mdi:flash'],
-    'elecusagecntlow': ['P1 Power Use Cnt Low', 'kWh', 'mdi:flash'],
-    'elecusagecnthigh': ['P1 Power Use Cnt High', 'kWh', 'mdi:flash'],
-    'elecprodcntlow': ['P1 Power Prod Cnt Low', 'kWh', 'mdi:flash'],
-    'elecprodcnthigh': ['P1 Power Prod Cnt High', 'kWh', 'mdi:flash'],
-    'elecsolar': ['P1 Power Solar', 'Watt', 'mdi:weather-sunny'],
-    'elecsolarcnt': ['P1 Power Solar Cnt', 'kWh', 'mdi:weather-sunny'],
-    'heat': ['P1 Heat', '', 'mdi:fire'],
+    'gasused': ['Gas Used Last Hour', 'm3', 'mdi:fire', '', ''],
+    'gasusedcnt': ['Gas Used Cnt', 'm3', 'mdi:fire', '', ''],
+    'elecusageflowpulse': ['Power Use', 'Watt', 'mdi:flash', '', ''],
+    'elecusageflowlow': ['P1 Power Use Low', 'Watt', 'mdi:flash', '', ''],
+    'elecusageflowhigh': ['P1 Power Use High', 'Watt', 'mdi:flash', '', ''],
+    'elecprodflowlow': ['P1 Power Prod Low', 'Watt', 'mdi:flash', '', ''],
+    'elecprodflowhigh': ['P1 Power Prod High', 'Watt', 'mdi:flash', '', ''],
+    'elecusagecntpulse': ['Power Use Cnt', 'kWh', 'mdi:flash', 'energy', 'measurement'],
+    'elecusagecntlow': ['P1 Power Use Cnt Low', 'kWh', 'mdi:flash', 'energy', 'measurement'],
+    'elecusagecnthigh': ['P1 Power Use Cnt High', 'kWh', 'mdi:flash', 'energy', 'measurement'],
+    'elecprodcntlow': ['P1 Power Prod Cnt Low', 'kWh', 'mdi:flash', '', ''],
+    'elecprodcnthigh': ['P1 Power Prod Cnt High', 'kWh', 'mdi:flash', 'energy', 'measurement'],
+    'elecsolar': ['P1 Power Solar', 'Watt', 'mdi:weather-sunny', '', ''],
+    'elecsolarcnt': ['P1 Power Solar Cnt', 'kWh', 'mdi:weather-sunny', 'energy', 'measurement'],
+    'heat': ['P1 Heat', '', 'mdi:fire', '', ''],
 }
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
@@ -87,9 +96,12 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         name = SENSOR_PREFIX + SENSOR_TYPES[resource][0]
         unit = SENSOR_TYPES[resource][1]
         icon = SENSOR_TYPES[resource][2]
+        device_class = SENSOR_TYPES[resource][3]
+        state_class = SENSOR_TYPES[resource][4]
+        last_reset = "1970-01-01T00:00:00+00:00"
 
-        _LOGGER.debug("Adding Toon Smart Meter sensor: {}, {}, {}, {}".format(name, sensor_type, unit, icon))
-        entities.append(ToonSmartMeterSensor(data, name, sensor_type, unit, icon))
+        _LOGGER.debug("Adding Toon Smart Meter sensor: {}, {}, {}, {}, {}, {}, {}".format(name, sensor_type, unit, icon, device_class ,state_class ,last_reset))
+        entities.append(ToonSmartMeterSensor(data, name, sensor_type, unit, icon, device_class ,state_class ,last_reset))
 
     async_add_entities(entities, True)
 
@@ -139,13 +151,16 @@ class ToonSmartMeterData(object):
 class ToonSmartMeterSensor(Entity):
     """Representation of a Smart Meter connected to Toon."""
 
-    def __init__(self, data, name, sensor_type, unit, icon):
+    def __init__(self, data, name, sensor_type, unit, icon, device_class, state_class, last_reset):
         """Initialize the sensor."""
         self._data = data
         self._name = name
         self._type = sensor_type
         self._unit = unit
         self._icon = icon
+        self._device_class = device_class
+        self._state_class = state_class
+        self._last_reset = last_reset
 
         self._state = None
         self._discovery = False
@@ -180,6 +195,21 @@ class ToonSmartMeterSensor(Entity):
     def unit_of_measurement(self):
         """Return the unit of measurement of this entity, if any."""
         return self._unit
+    
+    @property
+    def device_class(self):
+        """Return the device class of measurement of this entity, if any."""
+        return self._device_class
+    
+    @property
+    def state_class(self):
+        """Return the state class of measurement of this entity, if any."""
+        return self._state_class
+
+    @property
+    def last_reset(self):
+        """Return the last reset of measurement of this entity, if any."""
+        return self._last_reset
 
     async def async_update(self):
         """Get the latest data and use it to update our sensor state."""
